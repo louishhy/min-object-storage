@@ -82,7 +82,6 @@ def download_file(identity, file_identifier):
     """
     Endpoint for file downloading.
     """
-    print(file_identifier)
     data_collections = mongodb.get_mongodb().get_collection("data")
     result = data_collections.find_one({'file_identifier': file_identifier})
     if not result:
@@ -90,7 +89,6 @@ def download_file(identity, file_identifier):
     # Authentication to check owner
     if result['owner'] != identity:
         return "Unauthorized", 401
-    print(result)
     file_storage_directory = os.path.abspath(current_app.config['FILE_STORAGE_DIRECTORY'])
     file_path = os.path.join(
         file_storage_directory,
