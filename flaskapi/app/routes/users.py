@@ -61,7 +61,4 @@ def register():
         return "User created", 201 # Created
     else:
         return "Username already in use", 409 #Conflict
-
-
-    # Register the username, hash and salt
     
