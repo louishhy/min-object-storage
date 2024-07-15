@@ -144,9 +144,9 @@ def _handle_file_delete(identity, file_identifier):
     data_collections.delete_one({'file_identifier': file_identifier})
     return jsonify({"message": "File deleted"}), 200
 
-@data_bp.route("/get_file_list", methods=["GET"])
+@data_bp.route("/user_file", methods=["GET"])
 @jwt_token_required
-def get_file_list(identity):
+def get_all_user_files(identity):
     """
     Get all the file identifiers belonging to the user.
     """
@@ -158,7 +158,7 @@ def get_file_list(identity):
     file_identifiers = [result['file_identifier'] for result in result_cursor]
     return jsonify({"file_identifiers": file_identifiers}), 200
 
-@data_bp.route("/get_file_metadata/<file_identifier>", methods=["GET"])
+@data_bp.route("/metadata/<file_identifier>", methods=["GET"])
 @jwt_token_required
 def get_file_metadata(identity, file_identifier):
     """
