@@ -9,7 +9,6 @@ data_bp = Blueprint('data_bp', __name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 def jwt_token_required(handler):
     """
     Decorator for checking the jwt token.
@@ -44,9 +43,49 @@ def get_identity(identity):
     """
     return f"Logged in as {identity}"
 
-@data_bp.route("/upload_file", methods=["POST"])
+@data_bp.route("file/<file_identifier>", methods=["GET", "DELETE"])
 @jwt_token_required
-def upload_file(identity):
+def file_handler(identity, file_identifier):
+    """
+    Endpoint for file-related operations
+    """
+    if request.method == "GET":
+        return _handle_file_get(identity, file_identifier)
+    elif request.method == "DELETE":
+        return _handle_file_delete(identity, file_identifier)
+    else:
+        return {"error": "File handling error"}, 500
+    
+@data_bp.route("file", methods=["POST"])
+@jwt_token_required
+def file_upload_handler(identity):
+    return _handle_file_post(identity)
+
+
+def _handle_file_get(identity, file_identifier):
+    """
+    Endpoint for file downloading.
+    """
+    data_collections = mongodb.get_mongodb().get_collection("data")
+    result = data_collections.find_one({'file_identifier': file_identifier})
+    if not result:
+        return jsonify({"error": "File not found"}), 404
+    # Authentication to check owner
+    if result['owner'] != identity:
+        return jsonify({"error": "Unauthorized"}), 401
+    file_storage_directory = os.path.abspath(current_app.config['FILE_STORAGE_DIRECTORY'])
+    file_path = os.path.join(
+        file_storage_directory,
+        f"{result['filename']}"
+    )
+    # Return the file directly
+    return send_file(
+        path_or_file=file_path,
+        as_attachment=True,
+        download_name=result['filename']
+    ), 200 # OK
+
+def _handle_file_post(identity):
     """
     Endpoint for file uploading.
     """
@@ -82,50 +121,9 @@ def upload_file(identity):
         return jsonify({"error": "Error in saving the file"}), 500 # Internal server error
     return jsonify({"message": "File uploaded successfully"}), 201 # Created
 
-@data_bp.route("/download_file/<file_identifier>", methods=["GET"])
-@jwt_token_required
-def download_file(identity, file_identifier):
+def _handle_file_delete(identity, file_identifier):
     """
-    Endpoint for file downloading.
-    """
-    data_collections = mongodb.get_mongodb().get_collection("data")
-    result = data_collections.find_one({'file_identifier': file_identifier})
-    if not result:
-        return jsonify({"error": "File not found"}), 404
-    # Authentication to check owner
-    if result['owner'] != identity:
-        return jsonify({"error": "Unauthorized"}), 401
-    file_storage_directory = os.path.abspath(current_app.config['FILE_STORAGE_DIRECTORY'])
-    file_path = os.path.join(
-        file_storage_directory,
-        f"{result['filename']}"
-    )
-    # Return the file directly
-    return send_file(
-        path_or_file=file_path,
-        as_attachment=True,
-        download_name=result['filename']
-    ), 200 # OK
-
-@data_bp.route("/get_file_list", methods=["GET"])
-@jwt_token_required
-def get_file_list(identity):
-    """
-    Get all the file identifiers belonging to the user.
-    """
-    data_collections = mongodb.get_mongodb().get_collection("data")
-    result_cursor = data_collections.find({'owner': identity})
-    if result_cursor.count() == 0:
-        # Return empty list
-        return jsonify({"file_identifiers": []}), 200
-    file_identifiers = [result['file_identifier'] for result in result_cursor]
-    return jsonify({"file_identifiers": file_identifiers}), 200
-
-@data_bp.route("/delete_file/<file_identifier>", methods=["DELETE"])
-@jwt_token_required
-def delete_file(identity, file_identifier):
-    """
-    Delete a file.
+    Endpoint for deleting file
     """
     data_collections = mongodb.get_mongodb().get_collection("data")
     result = data_collections.find_one({'file_identifier': file_identifier})
@@ -145,5 +143,37 @@ def delete_file(identity, file_identifier):
         return jsonify({"error": "File not found"}), 404
     data_collections.delete_one({'file_identifier': file_identifier})
     return jsonify({"message": "File deleted"}), 200
+
+@data_bp.route("/get_file_list", methods=["GET"])
+@jwt_token_required
+def get_file_list(identity):
+    """
+    Get all the file identifiers belonging to the user.
+    """
+    data_collections = mongodb.get_mongodb().get_collection("data")
+    if data_collections.count_documents({'owner': identity}) == 0:
+        # Return empty list
+        return jsonify({"file_identifiers": []}), 200
+    result_cursor = data_collections.find({'owner': identity})
+    file_identifiers = [result['file_identifier'] for result in result_cursor]
+    return jsonify({"file_identifiers": file_identifiers}), 200
+
+@data_bp.route("/get_file_metadata/<file_identifier>", methods=["GET"])
+@jwt_token_required
+def get_file_metadata(identity, file_identifier):
+    """
+    Get the metadata of the file.
+    """
+    data_collections = mongodb.get_mongodb().get_collection("data")
+    # Get the result but removing the _id field
+    result = data_collections.find_one({'file_identifier': file_identifier}, 
+                                       {'_id': 0})
+    if not result:
+        return jsonify({"error": "File not found"}), 404
+    # Authentication to check owner
+    if result['owner'] != identity:
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify(result), 200
+
 
     
