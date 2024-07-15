@@ -13,10 +13,13 @@ Files are saved to the server with a unique ID (similar to the object storage sy
 ![Architecture](archi.png)
 
 ## Run the server
-> [!Notes about authorization]
+
+> [!IMPORTANT]
+>
 > The JWT token is required for restricted access endpoints. In this implementation,
-> after getting the JWT token, modify the header's Authorization field with 
+> after getting the JWT token, modify the header's `Authorization` field with 
 > `Bearer <your_JWT_token>`.
+
 1. Install docker from [here](https://docs.docker.com/get-docker/)
 2. Clone the repository and `cd` to the directory
 3. Run docker-compose
