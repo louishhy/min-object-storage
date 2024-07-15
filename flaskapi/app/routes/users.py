@@ -5,15 +5,16 @@ users_bp = Blueprint('users_bp', __name__)
 
 @users_bp.route('/login', methods=['POST'])
 def login():
-    if request.method == 'GET':
-        return _handle_login_get()
-    elif request.method == 'POST':
-        return _handle_login_post()
-        
-def _handle_login_get():
-    return "Not Implemented", 501
+    """
+    Login a user.
+    This endpoint issues a jwt token if the username and password are correct.
+    """
+    return _handle_login_post()
 
 def _handle_login_post():
+    # Check if the username and password exist in the request
+    if 'username' not in request.json or 'password' not in request.json:
+        return jsonify({"error": "Username or password missing"}), 400 # Bad request
     username = request.json['username']
     password = request.json['password']
     if _validate(username=username, password=password):
@@ -23,9 +24,16 @@ def _handle_login_post():
         )
         return jsonify({"jwt_token": token})
     else:
-        return "Authentication failed", 401
+        return jsonify({"error": "Invalid username or password"}), 401 # Unauthorized
 
 def _validate(username: str, password: str) -> bool:
+    """
+    Validate the username and password.
+    
+    :param username: The username.
+    :param password: The password.
+    :return: True if the username and password are valid, False otherwise.
+    """
     users_collections = mongodb.get_mongodb().get_collection("users")
     document = users_collections.find_one(
         filter={'username': username}
@@ -41,6 +49,12 @@ def _validate(username: str, password: str) -> bool:
 
 @users_bp.route('/register', methods=['POST'])
 def register():
+    """
+    Register a new user.
+    """
+    # Check if the username and password exist in the request
+    if 'username' not in request.json or 'password' not in request.json:
+        return jsonify({"error": "Username or password missing"}), 400 # Bad request
     username = request.json['username']
     password = request.json['password']
     # Check if user exists in database
@@ -58,7 +72,7 @@ def register():
                 'salt': salt
             }
         )
-        return "User created", 201 # Created
+        return jsonify({"message": "User created"}), 201 # Created
     else:
-        return "Username already in use", 409 #Conflict
+        return jsonify({"error": "User exists"}), 400 # Bad request
     

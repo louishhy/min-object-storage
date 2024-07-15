@@ -3,8 +3,20 @@ import os
 import datetime
 
 class JWTTokenManager:
+    """
+    Class for managing JWT tokens.
+    """
     @staticmethod
     def encode_jwt(identity, exp_seconds=3600):
+        """
+        Encode the JWT token.
+        
+        :param identity: The identity to encode.
+        :param exp_seconds: The expiration time in seconds.
+        :return: The encoded JWT token.
+        
+        :raises EnvironmentError: If the FLASK_SECRET_KEY environment variable is not set.
+        """
         secret_key = os.getenv('FLASK_SECRET_KEY')
         if not secret_key:
             raise EnvironmentError("FLASK_SECRET_KEY environment variable is not set.")
@@ -19,6 +31,16 @@ class JWTTokenManager:
     
     @staticmethod
     def decode_jwt(token) -> dict:
+        """
+        Decode the JWT token.
+
+        :param token: The token to decode.
+        :return: The decoded payload.
+
+        :raises ExpiredSignatureError: If the token has expired.
+        :raises InvalidTokenError: If the token is invalid.
+        :raises EnvironmentError: If the FLASK_SECRET_KEY environment variable is not set.
+        """
         secret_key = os.getenv('FLASK_SECRET_KEY')
         if not secret_key:
             raise EnvironmentError("FLASK_SECRET_KEY environment variable is not set.")

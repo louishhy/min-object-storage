@@ -1,13 +1,19 @@
 from flask import Blueprint, request, jsonify, current_app, send_file
 from ..extensions import JWTTokenManager, JWTTokenManagerError, InvalidTokenError, ExpiredSignatureError, mongodb
-from typing import Callable
 from functools import wraps
 import os
+import logging
 
 data_bp = Blueprint('data_bp', __name__)
 
-# Decorator for token protection
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 def jwt_token_required(handler):
+    """
+    Decorator for checking the jwt token.
+    """
     @wraps(handler)
     def decorator(*args, **kwargs):
         jwt_token = None
@@ -17,22 +23,22 @@ def jwt_token_required(handler):
             if len(auth_header_parts) == 2 and auth_header_parts[0] == "Bearer":
                 jwt_token = request.headers['Authorization'].split(" ")[1]
         if not jwt_token:
-            return "Wrong JWT token format or no token", 401
+            return jsonify({"error": "Token is missing or in wrong format"}), 401 # Unauthorized
         try:
             token_info = JWTTokenManager.decode_jwt(token=jwt_token)
         except InvalidTokenError:
-            return "Token invalid", 401
+            return jsonify({"error": "Invalid token"}), 401 # Unauthorized
         except ExpiredSignatureError:
-            return "Signature expired", 401
+            return jsonify({"error": "Token has expired"}), 401 # Unauthorized
         except JWTTokenManagerError:
-            return "Error in parsing the token", 401
+            return jsonify({"error": "Error in token validation"}), 500 # Internal server error
         identity = token_info.get('identity')
         return handler(identity, *args, **kwargs)
     return decorator
 
-@data_bp.route("/test_jwt", methods=["POST"])
+@data_bp.route("/get_identity", methods=["GET"])
 @jwt_token_required
-def test_jwt(identity):
+def get_identity(identity):
     """
     Endpoint for testing jwt validation.
     """
@@ -45,10 +51,10 @@ def upload_file(identity):
     Endpoint for file uploading.
     """
     if 'file' not in request.files:
-        return "File not uploaded", 400 # Bad request
+        return jsonify({"error": "No file part"}), 400 # Bad request
     metadata = request.form.to_dict()
     if 'file_identifier' not in metadata:
-        return "File identifier not specified", 400 # Bad request
+        return jsonify({"error": "No file identifier"}), 400 # Bad request
     file = request.files.get('file')
     _, file_extension = os.path.splitext(file.filename)
     new_filename = f"{metadata['file_identifier']}{file_extension}"
@@ -59,7 +65,7 @@ def upload_file(identity):
     # The identifier shall be universally unique.
     result = data_collections.find_one({'file_identifier': metadata["file_identifier"]})
     if result is not None:
-        return "File identifier must be globally unique", 400 # Bad request
+        return jsonify({"error": "File identifier must be globally unique"}), 400 # Bad request
     data_collections.insert_one(document=metadata)
     # Save the file
     try:
@@ -69,12 +75,12 @@ def upload_file(identity):
             new_filename
         )
         file.save(saving_path)
-    except:
+    except IOError as e:
         # Rollback the db ops
         data_collections.delete_one({'file_identifier': metadata["file_identifier"]})
-        # Raise exception with the original error message
-        raise
-    return "File uploaded successfully", 201 # Created
+        logger.error(f"Error in saving the file: {e}")
+        return jsonify({"error": "Error in saving the file"}), 500 # Internal server error
+    return jsonify({"message": "File uploaded successfully"}), 201 # Created
 
 @data_bp.route("/download_file/<file_identifier>", methods=["GET"])
 @jwt_token_required
@@ -85,10 +91,10 @@ def download_file(identity, file_identifier):
     data_collections = mongodb.get_mongodb().get_collection("data")
     result = data_collections.find_one({'file_identifier': file_identifier})
     if not result:
-        return "File not found", 404
+        return jsonify({"error": "File not found"}), 404
     # Authentication to check owner
     if result['owner'] != identity:
-        return "Unauthorized", 401
+        return jsonify({"error": "Unauthorized"}), 401
     file_storage_directory = os.path.abspath(current_app.config['FILE_STORAGE_DIRECTORY'])
     file_path = os.path.join(
         file_storage_directory,
@@ -99,8 +105,45 @@ def download_file(identity, file_identifier):
         path_or_file=file_path,
         as_attachment=True,
         download_name=result['filename']
+    ), 200 # OK
+
+@data_bp.route("/get_file_list", methods=["GET"])
+@jwt_token_required
+def get_file_list(identity):
+    """
+    Get all the file identifiers belonging to the user.
+    """
+    data_collections = mongodb.get_mongodb().get_collection("data")
+    result_cursor = data_collections.find({'owner': identity})
+    if result_cursor.count() == 0:
+        # Return empty list
+        return jsonify({"file_identifiers": []}), 200
+    file_identifiers = [result['file_identifier'] for result in result_cursor]
+    return jsonify({"file_identifiers": file_identifiers}), 200
+
+@data_bp.route("/delete_file/<file_identifier>", methods=["DELETE"])
+@jwt_token_required
+def delete_file(identity, file_identifier):
+    """
+    Delete a file.
+    """
+    data_collections = mongodb.get_mongodb().get_collection("data")
+    result = data_collections.find_one({'file_identifier': file_identifier})
+    if not result:
+        return jsonify({"error": "File not found"}), 404
+    # Authentication to check owner
+    if result['owner'] != identity:
+        return jsonify({"error": "Unauthorized"}), 401
+    file_storage_directory = os.path.abspath(current_app.config['FILE_STORAGE_DIRECTORY'])
+    file_path = os.path.join(
+        file_storage_directory,
+        f"{result['filename']}"
     )
-
-
+    try:
+        os.remove(file_path)
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
+    data_collections.delete_one({'file_identifier': file_identifier})
+    return jsonify({"message": "File deleted"}), 200
 
     
