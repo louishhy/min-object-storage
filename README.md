@@ -20,6 +20,12 @@ Files are saved to the server with a unique ID (similar to the object storage sy
 > after getting the JWT token, modify the header's `Authorization` field with 
 > `Bearer <your_JWT_token>`.
 
+> [!IMPORTANT]
+>
+> The server is running on HTTP for the sake of simplicity. 
+> It is recommended to run the server on HTTPS in a production environment. 
+> Also, ensure that you are using HTTP when you are testing with tools like `HTTPie`.
+
 1. Install docker from [here](https://docs.docker.com/get-docker/)
 2. Clone the repository and `cd` to the directory
 3. Run docker-compose
