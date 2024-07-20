@@ -120,7 +120,8 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+# The .env should not be tracked in production. I commented out here for demonstration purposes.
+# .env
 .venv
 env/
 venv/
@@ -159,6 +160,9 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-storage/
+storage/*
+!storage/.gitkeep
+mongodb/*
+!mongodb/.gitkeep
 
 __pycache__
